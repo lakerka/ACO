@@ -1,11 +1,10 @@
 package root;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class Ant {
-
-    public static final int TOP = 10;
 
     /**
      * Array for flaging that vertex has been visited.
@@ -24,25 +23,26 @@ public class Ant {
     Graph graph;
 
     public Ant(Graph graph, AntBrainz antBrainz, int vertexCount,
-	    int currentVertex) {
+	    int startingVertex) {
 	super();
-
+	final int TOP = 10;
 	this.tabu = new boolean[vertexCount + TOP];
 	this.edgeVisited = new boolean[vertexCount + TOP][vertexCount + TOP];
 	this.graph = graph;
 	this.antBrainz = antBrainz;
 	this.vertexCount = vertexCount;
-	this.startingVertex = currentVertex;
-	this.curVertex = currentVertex;
+	this.startingVertex = startingVertex;
+	this.curVertex = startingVertex;
 	this.visitedCount = 1;
 	this.tour.clear();
-	this.tour.add(currentVertex);
+	this.tour.add(startingVertex);
 	
 	for (int i = 1; i <= vertexCount; i++) {
-	    if (i != currentVertex) {
+	    if (i != startingVertex) {
 		availableVertexes.add(i);
 	    }
 	}
+	addVertexToTabu(startingVertex);
     }
 
     /**
@@ -58,19 +58,8 @@ public class Ant {
 	tour.add(newCurVertex);
 	edgeVisited[curVertex][newCurVertex] = true;
 	edgeVisited[newCurVertex][curVertex] = true;
-
-	tabu[newCurVertex] = true;
-
-	// remove vertex from available vertexes list
-	for (int i = availableVertexes.size() - 1; i >= 0; i--) {
-
-	    int vertexIndex = availableVertexes.get(i);
-	    
-	    if (tabu[vertexIndex]) {
-		availableVertexes.remove(i);
-	    }
-	}
-
+        tabu[newCurVertex] = true;
+	availableVertexes.remove(new Integer(newCurVertex));
 	curVertex = newCurVertex;
     }
 
@@ -98,6 +87,27 @@ public class Ant {
 
     public void removeVertexFromTabu(int v) {
 	tabu[v] = false;
+    }
+    
+    public void reset(int startingVertex) {
+        Arrays.fill(tabu, false);
+        for (boolean[] row: edgeVisited) {
+            Arrays.fill(row, false);
+        }
+        
+        this.startingVertex = startingVertex;
+        this.curVertex = startingVertex;
+        this.visitedCount = 1;
+        this.tour.clear();
+        this.tour.add(startingVertex);
+        this.tourLength = 0;
+        
+        this.availableVertexes.clear();
+        for (int i = 1; i <= vertexCount; i++) {
+            this.availableVertexes.add(i);
+        }
+        this.availableVertexes.remove(new Integer(startingVertex));
+        tabu[startingVertex] = true;
     }
 
 }

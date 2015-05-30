@@ -2,8 +2,13 @@ package root;
 
 import java.text.DecimalFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 import org.jfree.ui.RefineryUtilities;
 
@@ -14,60 +19,78 @@ import org.jfree.ui.RefineryUtilities;
  */
 public class AntSystem implements AntBrainz {
 
-    public static final int TOP = 10;
-
-    public static final boolean DISPAY_PLOT = true;
+    public static final boolean GENERATE_SUMMARY = false;
+    public static final boolean DISPAY_PLOT = false;
 
     /**
      * Pheromone influence level. The higher this value is the higher increase
      * in probability that ant will choose edge with small advantage of
      * pheromone over other edges.
      */
-    public static final double ALPHA = 2;
+    public double alpha = 2;
 
     /**
      * Randomness level. The higher this value is the more random ants edge
      * choosing pattern is.
      */
-    public static final double BETA = 12;
+    public double beta = 12;
 
     /**
      * Evaporation rate. Must be in range [0; 1] Used for limiting pheromone
      * accumulation on edges. if != 0 ants can forget bad paths.
      */
-    public static final double EVAPORATION = 0.5;
+    public double evaporation = 0.5;
 
-    public static final double INITIAL_PHEROMONE = 1.0;
+    public double initialPheromone = 1.0;
 
     private int antCount;
-    private List<Ant> ants = new ArrayList<>();
+    private List<Ant> ants = new ArrayList<Ant>();
+    private List<Worker> workers;
+    
     /**
      * Inverse distance raised to power.
      */
     private double euristic[][];
-    private Graph g;
+    private Graph graph;
     private int vertexCount;
     private int iterationCount;
+    private int threadCount;
     private static final double INF = 1e9;
     private double globalBestTourLength = INF;
-    final Visualizer visualizer;
+    private Visualizer visualizer;
 
-    public AntSystem(int antCount, int iterationCount, Graph g) {
-	super();
+    public AntSystem(double alpha, double beta, double evaporation,
+            double initialPheromone, int antCount,
+            int iterationCount, int threadCount,
+            Graph graph) {
 
+        this.alpha = alpha;
+        this.beta = beta;
+        this.evaporation = evaporation;
+        this.initialPheromone = initialPheromone;
+        
 	this.iterationCount = iterationCount;
+	this.threadCount = threadCount;
 	this.antCount = antCount;
-	this.g = g;
-	this.vertexCount = g.getVertexCount();
+	this.graph = graph;
+	this.vertexCount = graph.getVertexCount();
+
+	final int TOP = 10;
 	euristic = new double[vertexCount + TOP][vertexCount + TOP];
 	initPheromone();
 	initEuristic();
 
-	visualizer = new Visualizer("Ant system", g);
-	visualizer.pack();
-	RefineryUtilities.centerFrameOnScreen(visualizer);
-	visualizer.setVisible(DISPAY_PLOT);
-
+        ants.clear();
+        this.ants = getNewAnts(antCount);
+        this.workers = getNewWorkers(ants);
+        
+	
+	if (DISPAY_PLOT) {
+        	visualizer = new Visualizer("Ant system", graph);
+        	visualizer.pack();
+        	RefineryUtilities.centerFrameOnScreen(visualizer);
+        	visualizer.setVisible(DISPAY_PLOT);  
+        }
     }
 
     public void initEuristic() {
@@ -88,40 +111,41 @@ public class AntSystem implements AntBrainz {
 
     public void initPheromone() {
 
-	double[][] pheromone = g.getPheromoneArray();
+	double[][] pheromone = graph.getPheromoneArray();
 	for (int i = 0; i < pheromone.length; i++) {
 	    for (int j = i + 1; j < pheromone.length; j++) {
-		setArrayValue(INITIAL_PHEROMONE, pheromone, i, j);
+		setArrayValue(initialPheromone, pheromone, i, j);
 	    }
 	}
-
     }
 
-    String paramsString = "alpha: " + ALPHA + ", beta: " + BETA
-	    + ", evaporation: " + EVAPORATION;
+    String paramsString = "alpha: " + alpha + ", beta: " + beta
+	    + ", evaporation: " + evaporation;
 
     String tmpParamsString = "";
-
-    List<SummaryElement> summaryElements = new ArrayList<SummaryElement>();
-
+    
     public void start() {
-
-        DecimalFormat twoDigitsPrecisionFormat = new DecimalFormat("#.##");
-	summaryElements.clear();
-
+        
 	for (int i = 1; i <= iterationCount; i++) {
+//            System.out.println("Iteration: " + i);
 
-	    ants.clear();
-	    initAnts();
-
-	    for (int j = 0; j < ants.size(); j++) {
-
-		Ant ant = ants.get(j);
-
-		for (int j2 = 1; j2 <= vertexCount - 1; j2++) {
-		    ant.chooseAnVisitNextVertex();
-		}
-	    }
+            ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(threadCount,
+                    threadCount, 0, TimeUnit.NANOSECONDS,
+                    new LinkedBlockingQueue<Runnable>());
+           
+            
+            for (Worker worker : workers) {
+                threadPoolExecutor.execute(worker);
+            }
+            threadPoolExecutor.shutdown();
+            
+            try {
+                threadPoolExecutor.awaitTermination(Long.MAX_VALUE, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            
+	    updatePheromoneTrail();
 
 	    Ant bestIterationAnt = getAntWithShortestPath(ants);
 	    double bestIterationTourLenght = bestIterationAnt.getTourLength();
@@ -131,162 +155,21 @@ public class AntSystem implements AntBrainz {
 		globalBestTourLength = bestIterationTourLenght;
 
 		bestIterationAnt = getAntWithShortestPath(ants);
-
-		summaryElements.add(new SummaryElement(i, bestIterationAnt
-			.getTourLength()));
-
+		
 		if (DISPAY_PLOT) {
-		    // g.plot(bestIterationAnt.getTour(), true, i, antCount,
-		    // tmpParamsString);
-		    
+		    DecimalFormat twoDigitsPrecisionFormat = new DecimalFormat("#.##");
 		    tmpParamsString = paramsString + ", route length: "
 		    + twoDigitsPrecisionFormat.format(bestIterationTourLenght);
 		    visualizer.plot(bestIterationAnt.getTour(), true, tmpParamsString);
-
 		}
 
 		System.out.println("Iteration: " + i);
 		System.out.println("Best route length: " + globalBestTourLength
 			+ "");
 	    }
-
 	}
-	System.out.println("DONE. BEST: " + globalBestTourLength);
-	processSummary();
-    }
-
-    public void processSummary() {
-
-	SummaryElement bestSummaryElement = summaryElements.get(summaryElements
-		.size() - 1);
-	double bestValue = bestSummaryElement.getEvaluation();
-
-	double _50 = bestValue * 0.5 + bestValue;
-	double _75 = bestValue * 0.25 + bestValue;
-	double _90 = bestValue * 0.1 + bestValue;
-	double _95 = bestValue * 0.05 + bestValue;
-	double _98 = bestValue * 0.02 + bestValue;
-	double _100 = bestValue;
-
-	String summary = "";
-	int index = 0;
-
-	int summaryIndex = 1;
-	for (index = 0; index < summaryElements.size(); index++) {
-
-	    SummaryElement summaryEl = summaryElements.get(index);
-	    double summaryEval = summaryEl.getEvaluation();
-
-	    if (summaryEval <= _50) {
-		summary = summary + "[" + summaryIndex + "?" + summaryEval
-			+ " <= " + _50 + " iter: " + summaryEl.getIteration()
-			+ "]";
-		break;
-	    }
-	}
-
-	summaryIndex += 1;
-	while (index < summaryElements.size()) {
-
-	    double val = _75;
-
-	    SummaryElement summaryEl = summaryElements.get(index);
-	    double summaryEval = summaryEl.getEvaluation();
-
-	    if (summaryEval <= val) {
-		summary = summary
-			+ getSummaryStr(summaryIndex, summaryEval, val,
-				summaryEl.getIteration());
-		break;
-	    }
-	    index++;
-	}
-
-	summaryIndex += 1;
-	while (index < summaryElements.size()) {
-
-	    double val = _90;
-
-	    SummaryElement summaryEl = summaryElements.get(index);
-	    double summaryEval = summaryEl.getEvaluation();
-
-	    if (summaryEval <= val) {
-		summary = summary
-			+ getSummaryStr(summaryIndex, summaryEval, val,
-				summaryEl.getIteration());
-		break;
-	    }
-
-	    index++;
-	}
-
-	summaryIndex += 1;
-	while (index < summaryElements.size()) {
-
-	    double val = _95;
-
-	    SummaryElement summaryEl = summaryElements.get(index);
-	    double summaryEval = summaryEl.getEvaluation();
-
-	    if (summaryEval <= val) {
-		summary = summary
-			+ getSummaryStr(summaryIndex, summaryEval, val,
-				summaryEl.getIteration());
-		break;
-	    }
-
-	    index++;
-	}
-
-	summaryIndex += 1;
-	while (index < summaryElements.size()) {
-
-	    double val = _98;
-
-	    SummaryElement summaryEl = summaryElements.get(index);
-	    double summaryEval = summaryEl.getEvaluation();
-
-	    if (summaryEval <= val) {
-		summary = summary
-			+ getSummaryStr(summaryIndex, summaryEval, val,
-				summaryEl.getIteration());
-		break;
-	    }
-
-	    index++;
-	}
-
-	summaryIndex += 1;
-	while (index < summaryElements.size()) {
-
-	    double val = _100;
-
-	    SummaryElement summaryEl = summaryElements.get(index);
-	    double summaryEval = summaryEl.getEvaluation();
-
-	    if (summaryEval <= val) {
-		// summary = summary + "[" + summaryIndex + "?" + summaryEval +
-		// " <= " + val + " iter: "
-		// + summaryEl.getIteration() + "]";
-		summary = summary
-			+ getSummaryStr(summaryIndex, summaryEval, val,
-				summaryEl.getIteration());
-		break;
-	    }
-
-	    index++;
-	}
-
-	summary += "\n" + bestValue / 426.0;
-
-	System.out.println(summary);
-    }
-
-    public String getSummaryStr(int summaryIndex, double summaryEval, double val,
-	    int iteration) {
-
-	return "\n" + "[" + summaryIndex + "?" + summaryEval + " <= " + val
-		+ " iter: " + iteration + "]";
+        
+        System.out.println("DONE. BEST: " + globalBestTourLength);
     }
 
     public Ant getAntWithShortestPath(List<Ant> ants) {
@@ -306,34 +189,40 @@ public class AntSystem implements AntBrainz {
 	return bestAnt;
     }
 
-    public void initAnts() {
-
+    private List<Ant> getNewAnts(int antCount) {
+        List<Ant> ants = new ArrayList<Ant>();
 	for (int i = 0; i < antCount; i++) {
-
 	    // initially place ants randomly
 	    int currentAntVertex = randInt(1, vertexCount);
-	    // System.out.println(currentAntVertex);
-	    ants.add(new Ant(g, this, vertexCount, currentAntVertex));
+	    ants.add(new Ant(graph, this, vertexCount, currentAntVertex));
 	}
+	return ants;
+    }
+    
+    public List<Worker> getNewWorkers(List<Ant> ants) {
+        List<Worker> workers = new ArrayList<Worker>();
+        for (Ant ant : ants) {
+            Worker worker = new Worker(ant, graph);
+            workers.add(worker);
+        }
+        return workers;
     }
 
     /**
-     * Pheromone trail is updated after all ant have contructed path.
+     * Pheromone trail is updated when all ants have tour of visited vertexes.
      */
     public void updatePheromoneTrail() {
 
-	double[][] pheromone = g.getPheromoneArray();
+	double[][] pheromone = graph.getPheromoneArray();
 
 	for (int i = 1; i <= vertexCount; i++) {
 	    for (int j = i + 1; j <= vertexCount; j++) {
 
 		setArrayValue(0, pheromone, i, j);
-		setArrayValue((1.0 - EVAPORATION) * g.getPheromone(i, j)
+		setArrayValue((1.0 - evaporation) * graph.getPheromone(i, j)
 			+ bonusForUsedByAntEdge(i, j), pheromone, i, j);
-
 	    }
 	}
-
     }
 
     public void setArrayValue(double value, double arr[][], int firstIndex,
@@ -354,7 +243,6 @@ public class AntSystem implements AntBrainz {
 		bonus = bonus + 1.0 / ant.getTourLength();
 	    }
 	}
-
 	return bonus;
     }
 
@@ -362,10 +250,13 @@ public class AntSystem implements AntBrainz {
     public int chooseNextVertexForAnt(List<Integer> availableVertexes,
 	    int currentVertexIndex) {
 
+//        if (true) {
+//            return availableVertexes.get(randInt(0, availableVertexes.size() - 1));
+//        }
+        
 	double prob[] = new double[availableVertexes.size()];
-
 	double prevProb = 0;
-
+	
 	for (int i = 0; i < availableVertexes.size(); i++) {
 
 	    int nextVertexIndex = availableVertexes.get(i);
@@ -377,36 +268,45 @@ public class AntSystem implements AntBrainz {
 	    } else {
 		prob[i] = prevProb;
 	    }
-
 	    prevProb = prob[i];
 	}
 
-	double error = 0.000000001;
+	
+	double error = 0.000000001d;
 
-	// this variable is primary used for desiding if there was hit
+	// this variable is primary used for deciding if there was hit
 	double hitDecisionRandonNumber = getRandomNumber();
 	int decisionIndex = -1;
-
 	boolean decisionWasMade = false;
 
+        final double EPS = 0.01;
+        boolean allHaveVeryLowProbability = true;
+        
+        for (int i = 0; i < availableVertexes.size(); i++) {
+            double probToBeChosen = prob[i];
+            if (probToBeChosen > EPS) {
+                allHaveVeryLowProbability = false;
+                break;
+            }
+        }
+        
+        if (allHaveVeryLowProbability) {
+            decisionIndex = availableVertexes.get(randInt(0, availableVertexes.size() - 1));
+            decisionWasMade = true;
+        }
+        
 	while (!decisionWasMade) {
-
 	    for (int i = 0; i < availableVertexes.size(); i++) {
 
 		decisionWasMade = isHit(hitDecisionRandonNumber, prob[i], error);
-
 		if (decisionWasMade) {
 		    decisionIndex = availableVertexes.get(i);
 		    break;
 		}
 	    }
-
-	    if (error < 0.01) {
-		error *= 10;
-	    }
-
+	    error *= 10;
 	}
-
+        
 	return decisionIndex;
     }
 
@@ -425,7 +325,6 @@ public class AntSystem implements AntBrainz {
 		|| Math.abs(currentProb - upperLimit) < error) {
 	    return true;
 	}
-
 	return false;
     }
 
@@ -435,13 +334,10 @@ public class AntSystem implements AntBrainz {
      */
     public double upperPart(int fromVertexIndex, int toVertexIndex) {
 
-	validateVertexIndex(fromVertexIndex);
-	validateVertexIndex(toVertexIndex);
-
 	double inverseDistanceRaisedToPower = euristic[fromVertexIndex][toVertexIndex];
-	double pheromoneRaisedToPower = Math.pow(
-		g.getPheromone(fromVertexIndex, toVertexIndex), ALPHA);
-
+	double pheromone = graph.getPheromone(fromVertexIndex, toVertexIndex);
+	double pheromoneRaisedToPower = Math.pow(pheromone, alpha);
+	
 	return pheromoneRaisedToPower * inverseDistanceRaisedToPower;
     }
 
@@ -473,24 +369,21 @@ public class AntSystem implements AntBrainz {
 
 	    double inverseDistanceRaisedToPower = euristic[fromVertexIndex][toVertexIndex];
 	    double pheromoneRaisedToPower = Math.pow(
-		    g.getPheromone(fromVertexIndex, toVertexIndex), ALPHA);
+		    graph.getPheromone(fromVertexIndex, toVertexIndex), alpha);
 
 	    sum = sum + pheromoneRaisedToPower * inverseDistanceRaisedToPower;
-
 	}
-
 	return sum;
     }
 
     public double getInverseDistanceRaisedToPower(int fromVertexIndex,
 	    int toVertexIndex) {
 
-	double inverseDistance = 1.0 / g.getDistance(fromVertexIndex,
+	double inverseDistance = 1.0 / graph.getDistance(fromVertexIndex,
 		toVertexIndex);
-	double inverseDistanceRaisedToPower = Math.pow(inverseDistance, BETA);
+	double inverseDistanceRaisedToPower = Math.pow(inverseDistance, beta);
 
 	return inverseDistanceRaisedToPower;
-
     }
 
     public int getAntCount() {
@@ -498,15 +391,8 @@ public class AntSystem implements AntBrainz {
     }
 
     public static int randInt(int min, int max) {
-
-	// NOTE: Usually this should be a field rather than a method
-	// variable so that it is not re-seeded every call.
 	Random rand = new Random();
-
-	// nextInt is normally exclusive of the top value,
-	// so add 1 to make it inclusive
 	int randomNum = rand.nextInt((max - min) + 1) + min;
-
 	return randomNum;
     }
 

@@ -30,11 +30,24 @@ public class Main {
     // 35, 8, 46, 34, 52, 27, 45, 29, 48, 30, 4, 75, 76, 67, 26, 12, 40,
     // 17, 51, 6, 68, 2, 74, 28, 62, 73);
 
+    public static void startAntSystem(Graph graph) {
+
+        AntSystem acoSys = new AntSystem(2.0, 12.0, 0.5, 1.0, 51, 30, 4, graph);
+        acoSys.start();
+    }
+
+    public static void startGreedy(Graph graph) {
+
+        Greedy greedy = new Greedy(51, 70, graph);
+        greedy.start();
+    }
+    
     public static void main(String[] args) {
 	
 	Graph graph = new Graph(PATH + SEPARATOR + FILENAME);
 	
 	startAntSystem(graph);
+//	startGreedy(graph);
 
 	// Scanner finput;
 	// int input = 0;
@@ -57,20 +70,5 @@ public class Main {
 
 	// Long optPathDistance = g.calcDistance(optPathList);
 	// System.out.println(optPathDistance + "");
-	
     }
-
-    public static void startAntSystem(Graph graph) {
-
-	AntSystem acoSys = new AntSystem(51, 70, graph);
-	acoSys.start();
-
-    }
-
-    public static void startGreedy(Graph graph) {
-
-	Greedy greedy = new Greedy(51, 70, graph);
-	greedy.start();
-    }
-
 }
