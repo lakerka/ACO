@@ -1,1 +1,6 @@
 /bin/
+.*
+/src/root/IThreadFinishedListener*
+/src/root/Test*
+/src/root/ThreadPoolObserver*
+!.gitignore
