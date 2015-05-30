@@ -1,5 +1,9 @@
+package root;
+
 import java.io.File;
 import java.io.IOException;
+import java.text.DecimalFormat;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
 
@@ -8,16 +12,12 @@ import com.panayotis.gnuplot.plot.DataSetPlot;
 import com.panayotis.gnuplot.style.PlotStyle;
 import com.panayotis.gnuplot.style.Style;
 
+
 public class Graph {
 
-    // optimal
-    /*
-     * 1 8 38 31 44 18 7 28 6 37 19 27 17 43 30 36 46 33 20 47 21 32 39 48 5 42
-     * 24 10 45 35 4 26 2 29 34 41 16 22 3 23 14 25 13 11 12 15 40 9
-     */
-
     public static final int TOP = 10;
-
+    public static final JavaPlot javaPlot = new JavaPlot();
+    public static boolean flag = false;
     private int vCount = 0;
 
     private Vertex v[];
@@ -25,7 +25,7 @@ public class Graph {
     /**
      * Distance array
      */
-    long d[][];
+    double d[][];
 
     /**
      * Pheromone quantity on edge.
@@ -35,7 +35,7 @@ public class Graph {
     public Graph(String path) {
 
 	readGraphFromFile(path);
-	initDistances(vCount);
+	initDistances();
 	p = new double[vCount + TOP][vCount + TOP];
     }
 
@@ -53,63 +53,101 @@ public class Graph {
 	p[bVert][aVert] = pheromone;
     }
 
-    public void plot(List<Integer> path, int iterationCount, int antCount, 
-	    String params) {
-
-	JavaPlot p = new JavaPlot();
-
+    public void plot(List<Integer> path, boolean redraw, int iterationCount,
+	    int antCount, String params) {
+        
 	PlotStyle myPlotStyle = new PlotStyle();
 	myPlotStyle.setStyle(Style.LINESPOINTS);
-	
-	DataSetPlot s = parsePathToDataSetPlot(path);
-	
+
+	DataSetPlot dataSet = parsePathToDataSetPlot(path);
+
 	myPlotStyle.setLineWidth(1);
-	
-	String title = "iteration count: " + iterationCount + ", ant count: " + antCount;
+
+	String title = "";
+
+	if (iterationCount > 0) {
+	    title += "iteration count: " + iterationCount;
+	}
+	if (antCount > 0) {
+	    title += ", ant count: " + antCount;
+	}
 	if (params != null && !params.isEmpty()) {
 	    title += ", " + params;
 	}
+
+	if (title != null && !title.isEmpty()) {
+	    dataSet.setTitle(title);
+	}
+	dataSet.setPlotStyle(myPlotStyle);
 	
-	s.setTitle(title);
-	s.setPlotStyle(myPlotStyle);
-	p.addPlot(s);
-	p.newGraph();
-	p.plot();
+	javaPlot.addPlot(dataSet);
+	javaPlot.newGraph();
+	javaPlot.plot();
+	
     }
-    
+
     /**
      * If path is: 1 2 3 1 provided path must be 1 2 3.
-     * @param path hamiltonian path.
+     * 
+     * @param path
+     *            hamiltonian path.
      */
     public DataSetPlot parsePathToDataSetPlot(List<Integer> path) {
+
 	
+
 	if (path == null || path.isEmpty()) {
-	    throw new IllegalArgumentException("Path that is to be plotted must"
-	    	+ "be non null and non empty !");
+	    throw new IllegalArgumentException(
+		    "Path that is to be plotted must"
+			    + "be non null and non empty !");
 	}
-	
-	int data[][] = new int[vCount + 1][2];
-	
+
+	double data[][] = new double[vCount + 1][2];
+
 	for (int i = 0; i < path.size(); i++) {
-	    
+
 	    int index = path.get(i);
-	    
+
 	    Vertex curVertex = v[index];
-	    
+
 	    data[i][0] = curVertex.getX();
 	    data[i][1] = curVertex.getY();
 	}
-	
-	//must return to first vertex
+
+	// must return to first vertex
 	Vertex firstVertex = v[path.get(0)];
-	
+
 	int index = path.size();
 	data[index][0] = firstVertex.getX();
 	data[index][1] = firstVertex.getY();
-	
+
 	return new DataSetPlot(data);
     }
 
+    public List<Vertex> parseDataForVisualizer(List<Integer> path) {
+	
+
+	if (path == null || path.isEmpty()) {
+	    throw new IllegalArgumentException(
+		    "Path that is to be plotted must"
+			    + "be non null and non empty !");
+	}
+
+	List<Vertex> vertexList = new ArrayList<Vertex>();
+
+	for (int i = 0; i < path.size(); i++) {
+
+	    int index = path.get(i);
+	    Vertex curVertex = v[index];
+	    vertexList.add(curVertex);
+	}
+
+	// must return to first vertex
+	Vertex firstVertex = v[path.get(0)];
+	vertexList.add(firstVertex);
+	
+	return vertexList;
+    }
     /**
      * Initialized vertex count and vertex array.
      * 
@@ -123,10 +161,12 @@ public class Graph {
 	    Scanner scanner = new Scanner(new File(path));
 
 	    for (int i = 0; i < 3; i++) {
-		scanner.nextLine();
+		String line = scanner.nextLine();
+		// print(line);
 	    }
 	    for (int i = 0; i < 2; i++) {
-		scanner.next();
+		String nextString = scanner.next();
+		// print(nextString);
 	    }
 
 	    vCount = scanner.nextInt();
@@ -140,8 +180,8 @@ public class Graph {
 	    for (int i = 0; i < vCount; i++) {
 
 		int id = scanner.nextInt();
-		int x = scanner.nextInt();
-		int y = scanner.nextInt();
+		double x = scanner.nextDouble();
+		double y = scanner.nextDouble();
 
 		v[i + 1] = new Vertex(x, y);
 	    }
@@ -157,55 +197,57 @@ public class Graph {
 	System.out.println(s);
     }
 
-    private void initDistances(int vertexCount) {
+    private void initDistances() {
 
-	d = new long[vertexCount + TOP][vertexCount + TOP];
+	d = new double[vCount + TOP][vCount + TOP];
 
-	for (int i = 1; i <= vertexCount; i++) {
-	    for (int j = i + 1; j <= vertexCount; j++) {
+	for (int i = 1; i <= vCount; i++) {
+	    for (int j = i + 1; j <= vCount; j++) {
 
-		long distance = euclideanDistance(v[i], v[j]);
+		double distance = euclideanDistance(v[i], v[j]);
 		d[i][j] = distance;
 		d[j][i] = distance;
 	    }
 	}
     }
 
-    private long euclideanDistance(Vertex a, Vertex b) {
+    private double euclideanDistance(Vertex a, Vertex b) {
 
-	return sqr(a.getX() - b.getX()) + sqr(a.getY() - b.getY());
+	double xd = a.getX() - b.getX();
+	double yd = a.getY() - b.getY();
+
+	double squareRoot = Math.sqrt(sqr(xd) + sqr(yd));
+
+	return squareRoot;
     }
 
-    private long sqr(int value) {
+    private double sqr(double value) {
 
 	return value * value;
     }
 
-    
     /**
      * Calulates route length.
      * 
      * @param path
      *            path. If full path would be 1 2 3 1 then such path must be
      *            provided: 1 2 3
-     * @return distance of hamiltonian path.
+     * @return distance of TSP path.
      */
-    public long calcDistance(List<Integer> path) {
-
-	
+    public double calcDistance(List<Integer> path) {
 
 	if (path == null || path.isEmpty()) {
 	    return 0;
 	}
 
-	long totalDist = 0;
-
+	double totalDist = 0;
+	
+	int prevVertex = path.get(0);
 	for (int i = 1; i < path.size(); i++) {
-
-	    int curVert = path.get(i);
-	    int prevVert = path.get(i - 1);
-	    long dist = d[prevVert][curVert];
+	    int curVertex = path.get(i);
+	    double dist = d[prevVertex][curVertex];
 	    totalDist += dist;
+	    prevVertex = curVertex;
 	}
 
 	int startVertex = path.get(0);
@@ -216,26 +258,26 @@ public class Graph {
 	return totalDist;
     }
 
-    public int getvCount() {
-        return this.vCount;
+    public int getVertexCount() {
+	return this.vCount;
     }
-    
-    public long getDistance(int a, int b) {
+
+    public double getDistance(int a, int b) {
 	return d[a][b];
     }
-    
+
     public double getPheromone(int a, int b) {
 	return p[a][b];
     }
-    
+
     public void setPheromone(double value, int firstIndex, int secondIndex) {
 	p[firstIndex][secondIndex] = value;
     }
-    
+
     public double[][] getPheromoneArray() {
 	return p;
-      }
-    
+    }
+
     public Vertex getVertex(int index) {
 	return v[index];
     }

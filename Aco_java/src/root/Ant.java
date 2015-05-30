@@ -1,3 +1,5 @@
+package root;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -18,7 +20,7 @@ public class Ant {
     int visitedCount;
     int curVertex;
     AntBrainz antBrainz;
-    int tourLength = 0;
+    double tourLength = 0;
     Graph graph;
 
     public Ant(Graph graph, AntBrainz antBrainz, int vertexCount,
@@ -37,10 +39,8 @@ public class Ant {
 	this.tour.add(currentVertex);
 	
 	for (int i = 1; i <= vertexCount; i++) {
-
 	    if (i != currentVertex) {
 		availableVertexes.add(i);
-	    } else {
 	    }
 	}
     }
@@ -72,7 +72,6 @@ public class Ant {
 	}
 
 	curVertex = newCurVertex;
-
     }
 
     public boolean isEdgeVisited(int v1, int v2) {
@@ -80,7 +79,7 @@ public class Ant {
 	return edgeVisited[v1][v2];
     }
 
-    public long getTourLength() {
+    public double getTourLength() {
 
 	return tourLength + graph.getDistance(startingVertex, curVertex);
     }

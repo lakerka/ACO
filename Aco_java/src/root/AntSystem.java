@@ -1,15 +1,22 @@
+package root;
+
+import java.text.DecimalFormat;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
+
+import org.jfree.ui.RefineryUtilities;
 
 /**
  * The pheromone update is only done after all the ants had constructed the
  * tours and the amount of pheromone deposited by each ant is set to be a
  * function of the tour quality.
- *
  */
-public class ACO_system implements AntBrainz {
+public class AntSystem implements AntBrainz {
+
+    public static final int TOP = 10;
+
+    public static final boolean DISPAY_PLOT = true;
 
     /**
      * Pheromone influence level. The higher this value is the higher increase
@@ -22,32 +29,61 @@ public class ACO_system implements AntBrainz {
      * Randomness level. The higher this value is the more random ants edge
      * choosing pattern is.
      */
-    public static final double BETA = 20;
+    public static final double BETA = 12;
 
     /**
      * Evaporation rate. Must be in range [0; 1] Used for limiting pheromone
      * accumulation on edges. if != 0 ants can forget bad paths.
      */
-    public static final double EVAPORATION = 0.2;
+    public static final double EVAPORATION = 0.5;
 
-    public static final double INITIAL_PHEROMONE = 2;
+    public static final double INITIAL_PHEROMONE = 1.0;
 
     private int antCount;
     private List<Ant> ants = new ArrayList<>();
+    /**
+     * Inverse distance raised to power.
+     */
+    private double euristic[][];
     private Graph g;
     private int vertexCount;
     private int iterationCount;
-    private static final long INF = -1;
-    private long globalBestTourLength = INF;
+    private static final double INF = 1e9;
+    private double globalBestTourLength = INF;
+    final Visualizer visualizer;
 
-    public ACO_system(int antCount, int iterationCount, Graph g) {
+    public AntSystem(int antCount, int iterationCount, Graph g) {
 	super();
 
 	this.iterationCount = iterationCount;
 	this.antCount = antCount;
 	this.g = g;
-	this.vertexCount = g.getvCount();
+	this.vertexCount = g.getVertexCount();
+	euristic = new double[vertexCount + TOP][vertexCount + TOP];
 	initPheromone();
+	initEuristic();
+
+	visualizer = new Visualizer("Ant system", g);
+	visualizer.pack();
+	RefineryUtilities.centerFrameOnScreen(visualizer);
+	visualizer.setVisible(DISPAY_PLOT);
+
+    }
+
+    public void initEuristic() {
+
+	if (vertexCount <= 0) {
+	    throw new IllegalStateException("Vertex count must be initialize!");
+	}
+
+	for (int i = 1; i <= vertexCount; i++) {
+	    for (int j = i + 1; j <= vertexCount; j++) {
+
+		double euristicValue = getInverseDistanceRaisedToPower(i, j);
+		euristic[i][j] = euristicValue;
+		euristic[j][i] = euristicValue;
+	    }
+	}
     }
 
     public void initPheromone() {
@@ -66,70 +102,207 @@ public class ACO_system implements AntBrainz {
 
     String tmpParamsString = "";
 
+    List<SummaryElement> summaryElements = new ArrayList<SummaryElement>();
+
     public void start() {
 
-	for (int i = 0; i < iterationCount; i++) {
+        DecimalFormat twoDigitsPrecisionFormat = new DecimalFormat("#.##");
+	summaryElements.clear();
 
-	    System.out.println("Iteration: " + i);
+	for (int i = 1; i <= iterationCount; i++) {
 
 	    ants.clear();
 	    initAnts();
 
 	    for (int j = 0; j < ants.size(); j++) {
 
-		// System.out.println("Ant: " + j);
-
 		Ant ant = ants.get(j);
 
 		for (int j2 = 1; j2 <= vertexCount - 1; j2++) {
-
-		    // System.out.println("Vertex: " + j2);
-
 		    ant.chooseAnVisitNextVertex();
 		}
 	    }
 
-	    Ant bestIterationAnt = getBestPath(ants);
-	    long bestIterationTourLenght = bestIterationAnt.getTourLength();
+	    Ant bestIterationAnt = getAntWithShortestPath(ants);
+	    double bestIterationTourLenght = bestIterationAnt.getTourLength();
 
 	    if (bestIterationTourLenght < globalBestTourLength
 		    || globalBestTourLength == INF) {
 		globalBestTourLength = bestIterationTourLenght;
 
-		bestIterationAnt = getBestPath(ants);
+		bestIterationAnt = getAntWithShortestPath(ants);
 
-		if (true) {
-		    g.plot(bestIterationAnt.getTour(), i + 1, antCount,
-			    tmpParamsString);
+		summaryElements.add(new SummaryElement(i, bestIterationAnt
+			.getTourLength()));
+
+		if (DISPAY_PLOT) {
+		    // g.plot(bestIterationAnt.getTour(), true, i, antCount,
+		    // tmpParamsString);
+		    
+		    tmpParamsString = paramsString + ", route length: "
+		    + twoDigitsPrecisionFormat.format(bestIterationTourLenght);
+		    visualizer.plot(bestIterationAnt.getTour(), true, tmpParamsString);
+
 		}
+
+		System.out.println("Iteration: " + i);
+		System.out.println("Best route length: " + globalBestTourLength
+			+ "");
 	    }
 
-	    System.out.println("Best route length: " + globalBestTourLength
-		    + "");
-
 	}
-	System.out.println("Best: " + globalBestTourLength);
+	System.out.println("DONE. BEST: " + globalBestTourLength);
+	processSummary();
     }
 
-    public Ant getBestPath(List<Ant> ants) {
+    public void processSummary() {
 
-	long INF = -1;
-	long bestRouteLength = INF;
+	SummaryElement bestSummaryElement = summaryElements.get(summaryElements
+		.size() - 1);
+	double bestValue = bestSummaryElement.getEvaluation();
+
+	double _50 = bestValue * 0.5 + bestValue;
+	double _75 = bestValue * 0.25 + bestValue;
+	double _90 = bestValue * 0.1 + bestValue;
+	double _95 = bestValue * 0.05 + bestValue;
+	double _98 = bestValue * 0.02 + bestValue;
+	double _100 = bestValue;
+
+	String summary = "";
+	int index = 0;
+
+	int summaryIndex = 1;
+	for (index = 0; index < summaryElements.size(); index++) {
+
+	    SummaryElement summaryEl = summaryElements.get(index);
+	    double summaryEval = summaryEl.getEvaluation();
+
+	    if (summaryEval <= _50) {
+		summary = summary + "[" + summaryIndex + "?" + summaryEval
+			+ " <= " + _50 + " iter: " + summaryEl.getIteration()
+			+ "]";
+		break;
+	    }
+	}
+
+	summaryIndex += 1;
+	while (index < summaryElements.size()) {
+
+	    double val = _75;
+
+	    SummaryElement summaryEl = summaryElements.get(index);
+	    double summaryEval = summaryEl.getEvaluation();
+
+	    if (summaryEval <= val) {
+		summary = summary
+			+ getSummaryStr(summaryIndex, summaryEval, val,
+				summaryEl.getIteration());
+		break;
+	    }
+	    index++;
+	}
+
+	summaryIndex += 1;
+	while (index < summaryElements.size()) {
+
+	    double val = _90;
+
+	    SummaryElement summaryEl = summaryElements.get(index);
+	    double summaryEval = summaryEl.getEvaluation();
+
+	    if (summaryEval <= val) {
+		summary = summary
+			+ getSummaryStr(summaryIndex, summaryEval, val,
+				summaryEl.getIteration());
+		break;
+	    }
+
+	    index++;
+	}
+
+	summaryIndex += 1;
+	while (index < summaryElements.size()) {
+
+	    double val = _95;
+
+	    SummaryElement summaryEl = summaryElements.get(index);
+	    double summaryEval = summaryEl.getEvaluation();
+
+	    if (summaryEval <= val) {
+		summary = summary
+			+ getSummaryStr(summaryIndex, summaryEval, val,
+				summaryEl.getIteration());
+		break;
+	    }
+
+	    index++;
+	}
+
+	summaryIndex += 1;
+	while (index < summaryElements.size()) {
+
+	    double val = _98;
+
+	    SummaryElement summaryEl = summaryElements.get(index);
+	    double summaryEval = summaryEl.getEvaluation();
+
+	    if (summaryEval <= val) {
+		summary = summary
+			+ getSummaryStr(summaryIndex, summaryEval, val,
+				summaryEl.getIteration());
+		break;
+	    }
+
+	    index++;
+	}
+
+	summaryIndex += 1;
+	while (index < summaryElements.size()) {
+
+	    double val = _100;
+
+	    SummaryElement summaryEl = summaryElements.get(index);
+	    double summaryEval = summaryEl.getEvaluation();
+
+	    if (summaryEval <= val) {
+		// summary = summary + "[" + summaryIndex + "?" + summaryEval +
+		// " <= " + val + " iter: "
+		// + summaryEl.getIteration() + "]";
+		summary = summary
+			+ getSummaryStr(summaryIndex, summaryEval, val,
+				summaryEl.getIteration());
+		break;
+	    }
+
+	    index++;
+	}
+
+	summary += "\n" + bestValue / 426.0;
+
+	System.out.println(summary);
+    }
+
+    public String getSummaryStr(int summaryIndex, double summaryEval, double val,
+	    int iteration) {
+
+	return "\n" + "[" + summaryIndex + "?" + summaryEval + " <= " + val
+		+ " iter: " + iteration + "]";
+    }
+
+    public Ant getAntWithShortestPath(List<Ant> ants) {
+
+	double bestRouteLength = INF;
 	Ant bestAnt = null;
 
 	for (int i = 0; i < ants.size(); i++) {
 
 	    Ant ant = ants.get(i);
 
-	    if (bestRouteLength == INF || ant.getTourLength() < bestRouteLength) {
-
+	    if (i == 0 || ant.getTourLength() < bestRouteLength) {
 		bestRouteLength = ant.getTourLength();
 		bestAnt = ant;
 	    }
 	}
-
-	tmpParamsString = paramsString + ", route length: " + bestRouteLength;
-
 	return bestAnt;
     }
 
@@ -185,6 +358,7 @@ public class ACO_system implements AntBrainz {
 	return bonus;
     }
 
+    @Override
     public int chooseNextVertexForAnt(List<Integer> availableVertexes,
 	    int currentVertexIndex) {
 
@@ -208,6 +382,7 @@ public class ACO_system implements AntBrainz {
 	}
 
 	double error = 0.000000001;
+
 	// this variable is primary used for desiding if there was hit
 	double hitDecisionRandonNumber = getRandomNumber();
 	int decisionIndex = -1;
@@ -260,12 +435,25 @@ public class ACO_system implements AntBrainz {
      */
     public double upperPart(int fromVertexIndex, int toVertexIndex) {
 
-	double inverseDistanceRaisedToPower = getInverseDistanceRaisedToPower(
-		fromVertexIndex, toVertexIndex);
+	validateVertexIndex(fromVertexIndex);
+	validateVertexIndex(toVertexIndex);
+
+	double inverseDistanceRaisedToPower = euristic[fromVertexIndex][toVertexIndex];
 	double pheromoneRaisedToPower = Math.pow(
 		g.getPheromone(fromVertexIndex, toVertexIndex), ALPHA);
 
 	return pheromoneRaisedToPower * inverseDistanceRaisedToPower;
+    }
+
+    public void validateVertexIndex(int index) {
+	if (index <= 0) {
+	    throw new IllegalStateException("Vertex index is "
+		    + "must be greater than zero!");
+	}
+	if (index > vertexCount) {
+	    throw new IllegalStateException("Vertex index is higher "
+		    + "than number of vertexes");
+	}
     }
 
     /**
@@ -274,13 +462,16 @@ public class ACO_system implements AntBrainz {
      */
     public double lowerPart(int fromVertexIndex, List<Integer> availableVertexes) {
 
+	validateVertexIndex(fromVertexIndex);
+
 	double sum = 0;
 
 	for (int i = 0; i < availableVertexes.size(); i++) {
 
 	    int toVertexIndex = availableVertexes.get(i);
-	    double inverseDistanceRaisedToPower = getInverseDistanceRaisedToPower(
-		    fromVertexIndex, toVertexIndex);
+	    validateVertexIndex(toVertexIndex);
+
+	    double inverseDistanceRaisedToPower = euristic[fromVertexIndex][toVertexIndex];
 	    double pheromoneRaisedToPower = Math.pow(
 		    g.getPheromone(fromVertexIndex, toVertexIndex), ALPHA);
 
@@ -299,10 +490,6 @@ public class ACO_system implements AntBrainz {
 	double inverseDistanceRaisedToPower = Math.pow(inverseDistance, BETA);
 
 	return inverseDistanceRaisedToPower;
-
-    }
-
-    private void updateTrail() {
 
     }
 

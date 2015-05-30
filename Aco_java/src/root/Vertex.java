@@ -1,20 +1,21 @@
+package root;
 
 public class Vertex {
     
-    int x;
-    int y;
+    double x;
+    double y;
 
-    public Vertex(int x, int y) {
+    public Vertex(double x, double y) {
 	super();
 	this.x = x;
 	this.y = y;
     }
     
-    public int getX() {
+    public double getX() {
         return this.x;
     }
 
-    public int getY() {
+    public double getY() {
         return this.y;
     }
 }
