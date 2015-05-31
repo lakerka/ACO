@@ -7,16 +7,21 @@ import java.util.List;
 public class Main {
 
     public static final String PATH = "/home/zilva/vu/bakalaurinis/myWork/programs/data";
+//    public static final String FILENAME = "eil76.tsp";
+    public static final String FILENAME = "kroA100.tsp";
+    
     public static final String SEPARATOR = "/";
-    public static final String FILENAME = "eil76.tsp";
     public static final String PLOT_FILENAME = "test.dat";
 
+//    public static final String PATH = "/home/ubuntu/data";
+//    public static final String FILENAME = "eil76.tsp";
+    
+    
     // eil51, Best 426
     // eil76, Best 538
 
     static List<Integer> optPathList =
-    // new ArrayList<>();
-
+    
     // eil 51
     Arrays.asList(1, 22, 8, 26, 31, 28, 3, 36, 35, 20, 2, 29, 21, 16, 50, 34,
 	    30, 9, 49, 10, 39, 33, 45, 15, 44, 42, 40, 19, 41, 13, 25, 14, 24,
@@ -45,8 +50,14 @@ public class Main {
     public static void main(String[] args) {
 	
 	Graph graph = new Graph(PATH + SEPARATOR + FILENAME);
-	
-	startAntSystem(graph);
+	AntSystem acoSys;
+	if (args.length > 0) {
+	    acoSys = new AntSystem(2.0, 12.0, 0.5, 1.0, 51, 30, 
+                    Integer.parseInt(args[0]), graph);
+	}else {
+	    acoSys = new AntSystem(2.0, 12.0, 0.5, 1.0, 51, 30, 4, graph);
+	}
+        acoSys.start();
 //	startGreedy(graph);
 
 	// Scanner finput;

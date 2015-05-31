@@ -163,9 +163,9 @@ public class AntSystem implements AntBrainz {
 		    visualizer.plot(bestIterationAnt.getTour(), true, tmpParamsString);
 		}
 
-		System.out.println("Iteration: " + i);
-		System.out.println("Best route length: " + globalBestTourLength
-			+ "");
+//		System.out.println("Iteration: " + i);
+//		System.out.println("Best route length: " + globalBestTourLength
+//			+ "");
 	    }
 	}
         

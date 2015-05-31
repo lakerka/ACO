@@ -159,20 +159,20 @@ public class Graph {
 
 	    Scanner scanner = new Scanner(new File(path));
 
-	    for (int i = 0; i < 3; i++) {
-		String line = scanner.nextLine();
-		// print(line);
+	    List<String> firstLines = new ArrayList<String>();
+	    
+	    String line = "";
+	    while (!line.contains("NODE_COORD_SECTION")) {
+	        line = scanner.nextLine();
+		firstLines.add(line);
 	    }
-	    for (int i = 0; i < 2; i++) {
-		String nextString = scanner.next();
-		// print(nextString);
-	    }
-
-	    vCount = scanner.nextInt();
-
-	    for (int i = 0; i < 3; i++) {
-		scanner.nextLine();
-	    }
+	
+	    for (String string : firstLines) {
+                if (string.contains("DIMENSION")) {
+                    String tmp = string.split(" ")[1].trim();
+                    vCount = Integer.parseInt(tmp);
+                }
+            }
 
 	    v = new Vertex[vCount + TOP];
 
@@ -184,7 +184,6 @@ public class Graph {
 
 		v[i + 1] = new Vertex(x, y);
 	    }
-
 	    scanner.close();
 
 	} catch (IOException e) {
